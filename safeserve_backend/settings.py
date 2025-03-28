@@ -84,11 +84,12 @@ WSGI_APPLICATION = "safeserve_backend.wsgi.application"
 
 DATABASES = {
     'default': dj_database_url.config(
-        default='',
+        default='postgres://user:pass@localhost/dbname',
         conn_max_age=600,
         ssl_require=True
     )
 }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
