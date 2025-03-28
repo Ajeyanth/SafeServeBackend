@@ -31,24 +31,36 @@ class MenuItemListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def get_queryset(self):
+        """
+        Anyone can read (GET) menu items for a given restaurant_id.
+        Because permission_classes = [IsAuthenticatedOrReadOnly],
+        authenticated or anonymous read is allowed.
+        """
         restaurant_id = self.kwargs['restaurant_id']
         return MenuItem.objects.filter(restaurant_id=restaurant_id)
 
     def get_serializer_context(self):
+        """
+        For GET requests, we do NOT check 'owner=self.request.user'.
+        That prevents the AnonymousUser error.
+
+        We simply won't pass a restaurant instance into the context
+        unless we need it for creation. So, set to None here.
+        """
         context = super().get_serializer_context()
-        restaurant_id = self.kwargs['restaurant_id']
-        try:
-            restaurant = Restaurant.objects.get(pk=restaurant_id, owner=self.request.user)
-            context['restaurant'] = restaurant
-        except Restaurant.DoesNotExist:
-            context['restaurant'] = None
+        context['restaurant'] = None
         return context
 
     def perform_create(self, serializer):
+        """
+        Only the restaurant's owner can POST (create) a new menu item.
+        We fetch the restaurant with 'owner=self.request.user'.
+        If the user is not the owner, this query raises Restaurant.DoesNotExist,
+        leading to 404 or a handled exception (depending on how you handle it).
+        """
         restaurant_id = self.kwargs['restaurant_id']
         restaurant = Restaurant.objects.get(pk=restaurant_id, owner=self.request.user)
         serializer.save(restaurant=restaurant)
-
 
 
 class CategoryListCreateView(generics.ListCreateAPIView):
@@ -94,7 +106,7 @@ class GenerateQRCodeView(APIView):
         try:
             # Optionally enforce ownership:
             # restaurant = Restaurant.objects.get(id=restaurant_id, owner=request.user)
-            menu_url = f"http://192.168.1.111:3000/restaurant/{restaurant_id}/menu"
+            menu_url = f"http://192.168.0.30:3000/restaurant/{restaurant_id}/menu"
             qr = qrcode.QRCode(
                 version=1,
                 error_correction=qrcode.constants.ERROR_CORRECT_L,
@@ -110,3 +122,15 @@ class GenerateQRCodeView(APIView):
             return HttpResponse(buffer, content_type="image/png")
         except Restaurant.DoesNotExist:
             return Response({"error": "Restaurant not found or not owned by you."}, status=status.HTTP_404_NOT_FOUND)
+
+class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = MenuItemSerializer
+    permission_classes = [AllowAny]
+
+    def get_queryset(self):
+        """
+        Returns menu items that belong to this restaurant_id.
+        Optionally ensure ownership if you want only the owner to update/delete.
+        """
+        restaurant_id = self.kwargs['restaurant_id']
+        return MenuItem.objects.filter(restaurant_id=restaurant_id)
